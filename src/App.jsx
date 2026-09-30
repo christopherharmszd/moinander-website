@@ -14,10 +14,25 @@ const siteUrl = (path) => `${baseUrl}${path.replace(/^\/+/, "")}`;
 const formAccessKey = "47090194-73d1-438b-9cd8-6a87e50d579b";
 const formatDate = (date) => new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Berlin" }).format(new Date(date));
 const articleUrl = (slug) => `${siteUrl('/projekte/')}?beitrag=${encodeURIComponent(slug)}`;
+function linkedText(text) {
+  const parts = [];
+  const links = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let start = 0;
+  for (const match of text.matchAll(links)) {
+    let url;
+    try { url = new URL(match[2]); } catch { continue; }
+    if (match.index > start) parts.push(text.slice(start, match.index));
+    parts.push(<a key={`${match.index}-${url.href}`} href={url.href} target="_blank" rel="noopener noreferrer">{match[1]}</a>);
+    start = match.index + match[0].length;
+  }
+  if (start < text.length) parts.push(text.slice(start));
+  return parts;
+}
+
 const articleComponents = {
   types: {
     image: ({value}) => value.imageUrl ? <figure className="article-inline-image"><img src={value.imageUrl} alt={value.alt || ''} loading="lazy" />{(value.caption || value.credit) && <figcaption>{value.caption}{value.caption && value.credit && <span> · </span>}{value.credit && <span>{value.credit}</span>}</figcaption>}</figure> : null,
-    textSection: ({value}) => <div className="article-text-section">{(value.text || '').split(/\n\s*\n/).filter((paragraph) => paragraph.trim()).map((paragraph, index) => <p key={index}>{paragraph.trim()}</p>)}</div>,
+    textSection: ({value}) => <div className="article-text-section">{(value.text || '').split(/\n\s*\n/).filter((paragraph) => paragraph.trim()).map((paragraph, index) => <p key={index}>{linkedText(paragraph.trim())}</p>)}</div>,
     gallery: ({value}) => <Gallery images={value.images} />,
   },
 };
