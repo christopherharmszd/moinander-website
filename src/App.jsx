@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, Handshake, HeartHandshake, Menu, UsersRound, 
 import { getFeaturedProjects, getUpcomingEvents } from "./content.js";
 import { loadPublishedContent } from "./sanity.js";
 import Gallery, {sizedImage} from "./Gallery.jsx";
+import { LegalPage } from "./Legal.jsx";
 
 const navigation = [
   ["Startseite", "/"], ["Über uns", "/verein/"], ["Projekte", "/projekte/"],
@@ -82,6 +83,8 @@ const detailPages = {
     eyebrow: "KONTAKT", title: "Lass uns ins Gespräch kommen.",
     intro: "Du hast eine Frage, eine Idee oder möchtest Moinander kennenlernen? Schreib uns eine Nachricht.",
   },
+  impressum: {eyebrow: "RECHTLICHES", title: "Impressum", intro: "Angaben zum Verein und Kontaktmöglichkeiten."},
+  datenschutz: {eyebrow: "RECHTLICHES", title: "Datenschutz & Cookies", intro: "Wie wir Daten beim Besuch der Website und bei Nachrichten verarbeiten."},
 };
 
 function ContactForm() {
@@ -96,7 +99,7 @@ function ContactForm() {
     catch (cause) { setError(cause.message || "Bitte versuche es später erneut."); }
     finally { setSending(false); }
   };
-  return sent ? <div className="form-message" role="status"><strong>Danke für deine Nachricht!</strong><p>Deine Nachricht wurde an Moinander übermittelt.</p><button className="text-link reset-link" type="button" onClick={() => setSent(false)}>Weitere Nachricht schreiben <ArrowRight size={18} /></button></div> : <form className="form-grid" onSubmit={handleSubmit}><label>Dein Name<input required name="name" autoComplete="name" /></label><label>E-Mail-Adresse<input required type="email" name="email" autoComplete="email" /></label><label className="full">Deine Nachricht<textarea required name="message" rows="5" /></label><input className="honeypot" type="checkbox" name="botcheck" tabIndex="-1" autoComplete="off" aria-hidden="true" />{error && <p className="form-error full" role="alert">{error}</p>}<button className="button button-dark form-submit" type="submit" disabled={sending}>{sending ? "Wird gesendet…" : "Nachricht senden"} <ArrowRight size={18} /></button></form>;
+  return sent ? <div className="form-message" role="status"><strong>Danke für deine Nachricht!</strong><p>Deine Nachricht wurde an Moinander übermittelt.</p><button className="text-link reset-link" type="button" onClick={() => setSent(false)}>Weitere Nachricht schreiben <ArrowRight size={18} /></button></div> : <form className="form-grid" onSubmit={handleSubmit}><label>Dein Name<input required name="name" autoComplete="name" /></label><label>E-Mail-Adresse<input required type="email" name="email" autoComplete="email" /></label><label className="full">Deine Nachricht<textarea required name="message" rows="5" /></label><input className="honeypot" type="checkbox" name="botcheck" tabIndex="-1" autoComplete="off" aria-hidden="true" /><p className="form-privacy full">Zur Bearbeitung senden wir deine Angaben über Web3Forms an Moinander. Mehr dazu unter <a href={siteUrl('/datenschutz/')}>Datenschutz & Cookies</a>.</p>{error && <p className="form-error full" role="alert">{error}</p>}<button className="button button-dark form-submit" type="submit" disabled={sending}>{sending ? "Wird gesendet…" : "Nachricht senden"} <ArrowRight size={18} /></button></form>;
 }
 
 function DetailPage({ page, openProposal, projects, events, partners, board }) {
@@ -105,9 +108,10 @@ function DetailPage({ page, openProposal, projects, events, partners, board }) {
   const article = page === 'projekte' ? projects.find((item) => item.slug === articleSlug) : null;
   return <main className="detail-main">
     <section className="detail-hero page-gutter"><p className="eyebrow lime">{info.eyebrow}</p><h1>{info.title}</h1><p>{info.intro}</p><a className="detail-back" href={siteUrl("/")}>← Zur Startseite</a></section>
+    {(page === 'impressum' || page === 'datenschutz') && <LegalPage page={page} />}
     {page === "verein" && <>
       <nav className="section-nav page-gutter" aria-label="Auf dieser Seite"><span>Auf dieser Seite</span><a href="#ziele">Unsere Ziele</a><a href="#vorstand">Vorstand</a></nav>
-      <section className="section association-section page-gutter" id="ziele"><div className="section-heading"><p className="eyebrow blue">UNSERE ZIELE</p><h2>Gute Ideen sollen weiterkommen.</h2></div><p className="lead">Moinander e.V. möchte Menschen vernetzen, Ressourcen bündeln und Projekte für Sport, Jugend und Gemeinschaft möglich machen. Als Förderverein unterstützen wir Engagement dort, wo es einen Unterschied machen kann.</p><a className="text-link" href={siteUrl("/projekte/")}>Projekte & Einblicke ansehen <ArrowRight size={18} /></a></section>
+      <section className="section association-section page-gutter" id="ziele"><div className="section-heading"><p className="eyebrow blue">UNSERE ZIELE</p><h2>Gute Ideen sollen weiterkommen.</h2></div><p className="lead">Moinander möchte Menschen vernetzen, Ressourcen bündeln und Projekte für Sport, Jugend und Gemeinschaft möglich machen. Als Förderverein unterstützen wir Engagement dort, wo es einen Unterschied machen kann.</p><a className="text-link" href={siteUrl("/projekte/")}>Projekte & Einblicke ansehen <ArrowRight size={18} /></a></section>
       <section className="section board-section page-gutter" id="vorstand"><div className="section-heading"><p className="eyebrow blue">DER VEREIN</p><h2>Der gewählte Vorstand.</h2><p>Die Porträts ergänzen wir, sobald passende Fotos vorliegen.</p></div><div className="board board-full">{(board.length ? board : [{id:'christopher',name:'Christopher Harms',role:'1. Vorsitzender'},{id:'liesa',name:'Liesa',role:'2. Vorsitzende'},{id:'martina',name:'Martina Harms',role:'Schatzmeisterin'}]).map((member) => <div key={member.id}>{member.portraitUrl && <img className="board-portrait" src={member.portraitUrl} alt={member.portraitAlt || member.name} />}<strong>{member.name}</strong><span>{member.role}</span></div>)}</div></section>
       <section className="detail-cta page-gutter"><div><p className="eyebrow blue">MITMACHEN</p><h2>Du möchtest Teil davon sein?</h2><p>Erfahre, wie du dich mit Ideen, Zeit oder Förderung einbringen kannst.</p></div><a className="button button-dark" href={siteUrl("/mitmachen/")}>Möglichkeiten entdecken <ArrowRight size={18} /></a></section>
     </>}
@@ -163,6 +167,7 @@ function ProposalDialog({ close }) {
           <label className="full">Worum geht es?<textarea required name="description" rows="4" /></label>
           <label className="full">Welche Unterstützung wäre hilfreich?<textarea name="support" rows="3" /></label>
           <input className="honeypot" type="checkbox" name="botcheck" tabIndex="-1" autoComplete="off" aria-hidden="true" />
+          <p className="form-privacy full">Zur Bearbeitung senden wir deine Angaben über Web3Forms an Moinander. Mehr dazu unter <a href={siteUrl('/datenschutz/')}>Datenschutz & Cookies</a>.</p>
           {error && <p className="form-error full" role="alert">{error}</p>}
           <button className="button button-lime form-submit" type="submit" disabled={sending}>{sending ? "Wird gesendet…" : "Vorschlag senden"} <ArrowRight size={18} /></button>
         </form>}
@@ -175,6 +180,7 @@ export function App() {
   const relativePath = pathname.startsWith(baseUrl) ? pathname.slice(baseUrl.length) : pathname.replace(/^\/+/, "");
   const page = relativePath.split("/").filter(Boolean)[0];
   const isDetailPage = Boolean(detailPages[page]);
+  const isLegalPage = page === 'impressum' || page === 'datenschutz';
   const [content, setContent] = useState({ projects: [], events: [], partners: [], board: [] });
   const { projects, events, partners, board } = content;
   const nextEvent = getUpcomingEvents(events)[0];
@@ -187,12 +193,13 @@ export function App() {
   const floatingButtonRef = useRef(null);
   const floatingPanelRef = useRef(null);
   useEffect(() => {
+    if (isLegalPage) return;
     const controller = new AbortController();
     loadPublishedContent(controller.signal).then(setContent).catch((error) => {
       if (error.name !== 'AbortError') console.error('Öffentliche Inhalte konnten nicht geladen werden:', error);
     });
     return () => controller.abort();
-  }, []);
+  }, [isLegalPage]);
   useEffect(() => {
     const onScroll = () => {
       const y = window.scrollY;
@@ -267,7 +274,7 @@ export function App() {
         <section className="section participate-section page-gutter" id="mitmachen"><div><p className="eyebrow lime">MITMACHEN</p><h2>Dein Engagement zählt.</h2><p>Ob als ordentliches Mitglied mit eigenen Ideen oder als Fördermitglied: Moinander lebt von Menschen, die etwas bewegen wollen.</p></div><div className="participate-actions"><a className="button button-lime" href={siteUrl("/mitmachen/")}>Möglichkeiten entdecken <ArrowRight size={19} /></a><button className="button button-outline" type="button" onClick={openProposal}>Projekt vorschlagen <ArrowRight size={19} /></button></div></section>
         <section className="section home-contact-section page-gutter"><div><p className="eyebrow blue">KONTAKT</p><h2>Lass uns ins Gespräch kommen.</h2><p>Du hast eine Frage, eine Idee oder möchtest Moinander kennenlernen?</p></div><a className="button button-dark" href={siteUrl("/kontakt/")}>Nachricht schreiben <ArrowRight size={18} /></a></section>
       </main>}
-      <footer className="site-footer page-gutter"><Logo /><p>Menschen verbinden. Projekte ermöglichen.</p><div className="footer-links"><a href={siteUrl("/")}>Startseite</a><a href={siteUrl("/verein/")}>Über uns</a><a href={siteUrl("/projekte/")}>Projekte</a><a href={siteUrl("/termine/")}>Termine</a><a href={siteUrl("/partner/")}>Partner</a><a href={siteUrl("/mitmachen/")}>Mitmachen</a><a href={siteUrl("/kontakt/")}>Kontakt</a></div><span>© 2026 Moinander e.V.</span></footer>
+      <footer className="site-footer page-gutter"><Logo /><p>Menschen verbinden. Projekte ermöglichen.</p><div className="footer-links"><a href={siteUrl("/")}>Startseite</a><a href={siteUrl("/verein/")}>Über uns</a><a href={siteUrl("/projekte/")}>Projekte</a><a href={siteUrl("/termine/")}>Termine</a><a href={siteUrl("/partner/")}>Partner</a><a href={siteUrl("/mitmachen/")}>Mitmachen</a><a href={siteUrl("/kontakt/")}>Kontakt</a></div><div className="footer-legal"><a href={siteUrl('/impressum/')}>Impressum</a><a href={siteUrl('/datenschutz/')}>Datenschutz & Cookies</a></div><span>© 2026 Moinander</span></footer>
     </div>
     {floatingVisible && !proposalOpen && <>
       {floatingMenuOpen && <div className="floating-menu-backdrop" onClick={() => setFloatingMenuOpen(false)} aria-hidden="true" />}

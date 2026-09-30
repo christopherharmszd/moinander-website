@@ -1,4 +1,4 @@
-# Moinander e.V. Website
+# Moinander Website
 
 Der öffentliche Webauftritt ist eine React/Vite Website mit eigenen Seiten für Verein, Projekte, Termine, Partner, Mitmachen und Kontakt.
 

@@ -7,7 +7,7 @@ export default defineConfig({
   build: {
     outDir: "dist/client",
     rollupOptions: {
-      input: ["index.html", "verein/index.html", "projekte/index.html", "termine/index.html", "partner/index.html", "mitmachen/index.html", "kontakt/index.html", "studio/index.html"].map((file) => resolve(import.meta.dirname, file)),
+      input: ["index.html", "verein/index.html", "projekte/index.html", "termine/index.html", "partner/index.html", "mitmachen/index.html", "kontakt/index.html", "impressum/index.html", "datenschutz/index.html", "studio/index.html"].map((file) => resolve(import.meta.dirname, file)),
     },
   },
   optimizeDeps: {
