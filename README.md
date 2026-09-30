@@ -15,8 +15,8 @@ Der Workflow `.github/workflows/pages.yml` baut die Website bei Änderungen auf 
 
 Im Repository muss unter **Settings → Pages** als Quelle **GitHub Actions** ausgewählt sein. Eine eigene Domain wird dort erst nach Abstimmung und Prüfung der DNS-Einträge eingerichtet.
 
-## Noch zu verbinden
+## Inhalte und Formulare
 
-- Sanity für redaktionelle Inhalte und die Studio-Verwaltung. Die öffentliche Website darf nur veröffentlichte Inhalte abrufen. Schreibzugänge und Tokens gehören nicht in den Browser oder dieses Repository.
-- Web3Forms für das Kontaktformular und Projektvorschläge. Der aktuelle Formularzustand ist ein sichtbarer Entwurf und versendet noch keine Nachricht.
-- Die Vereinsdomain, sobald Web- und Mail-DNS geprüft sind.
+- Projekte, Termine, Partner und Vorstand werden aus dem Sanity-Projekt `nqq96vbs` geladen. Nur veröffentlichte Dokumente erscheinen öffentlich. Die Redaktion läuft im [eigenen Cloudflare Worker](https://moinander-studio.christopher-harms.workers.dev/) und verlangt eine Sanity-Anmeldung. Ihre Konfiguration liegt unter `studio/`.
+- Web3Forms für Kontakt und Projektvorschläge ist mit dem Moinander-Formular und dem Empfänger `info@moinander.de` verbunden. Die Formulare zeigen Erfolg erst nach einer bestätigten Antwort des Dienstes.
+- Die Vereinsdomain `moinander.de` wird nach Prüfung der Web- und Mail-DNS-Einträge verbunden.
