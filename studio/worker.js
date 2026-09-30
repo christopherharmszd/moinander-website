@@ -68,6 +68,16 @@ function image(ref, alt) {
   return {_type: 'image', asset: {_type: 'reference', _ref: ref}, alt: text(alt, 300)}
 }
 
+function galleryImages(value) {
+  if (!Array.isArray(value) || value.length > 60) throw new Error('Eine Galerie darf höchstens 60 Bilder enthalten.')
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('Ein Galeriebild ist ungültig.')
+    const asset = image(item.imageAssetId, item.alt)
+    if (!asset) throw new Error('Bitte unvollständige Galeriebilder entfernen.')
+    return {...asset, _key: key(item.key), caption: text(item.caption, 300), credit: text(item.credit, 200)}
+  })
+}
+
 function key(value) {
   return typeof value === 'string' && /^[a-zA-Z0-9_-]{6,40}$/.test(value)
     ? value : crypto.randomUUID().replace(/-/g, '').slice(0, 12)
@@ -100,6 +110,10 @@ function blocks(value, {publish = false} = {}) {
       const credit = text(item.credit, 200)
       const note = text(item.note, 300)
       result.push({_type: 'image', _key: key(item.key), ...(asset || {}), caption, credit, ...(!publish && note ? {note} : {})})
+    } else if (item.type === 'gallery') {
+      const images = galleryImages(item.images || [])
+      if (publish && !images.length) throw new Error('Bitte mindestens ein Galeriebild hochladen oder die leere Galerie entfernen.')
+      result.push({_type: 'gallery', _key: key(item.key), images})
     } else if (item.type === 'text') {
       const content = text(item.text, 10000).replace(/\r\n?/g, '\n')
       const block = (item.style || 'normal') === 'normal' && content.includes('\n')
@@ -130,13 +144,19 @@ function cleanDocument(input) {
     doc.slug = {_type: 'slug', current: slug(input.slug || doc.title)}
     doc.kind = text(input.kind, 80)
     doc.articleTemplate = text(input.articleTemplate || 'feature', 20)
-    if (!['short', 'photo', 'feature'].includes(doc.articleTemplate)) throw new Error('Unbekannte Beitragsvorlage.')
+    if (!['short', 'photo', 'feature', 'gallery'].includes(doc.articleTemplate)) throw new Error('Unbekannte Beitragsvorlage.')
     doc.summary = text(input.summary, 300)
     doc.body = blocks(input.body, {publish})
     doc.publishedAt = date(input.publishedAt) || new Date().toISOString()
     doc.featuredOnHome = input.featuredOnHome === true
     doc.homeOrder = doc.featuredOnHome ? number(input.homeOrder, 1, 3) : undefined
-    doc.image = image(input.imageAssetId, input.imageAlt)
+    if (doc.articleTemplate === 'gallery') {
+      const photos = doc.body.filter((block) => block._type === 'gallery').flatMap((block) => block.images)
+      if (publish && !photos.length) throw new Error('Bitte für den Galeriebeitrag mindestens ein Bild hochladen.')
+      const cover = photos.find((photo) => photo._key === input.coverImageKey) || photos[0]
+      doc.coverImageKey = cover?._key
+      doc.image = cover ? {_type: 'image', asset: cover.asset, alt: cover.alt} : undefined
+    } else doc.image = image(input.imageAssetId, input.imageAlt)
     if (doc.featuredOnHome && !doc.homeOrder) throw new Error('Für die Startseite bitte Platz 1, 2 oder 3 wählen.')
   } else if (type === 'event') {
     doc.title = text(input.title, 180)
@@ -270,7 +290,7 @@ export default {
     if (target.pathname === '/api/documents' && request.method === 'GET') {
       const type = target.searchParams.get('type')
       if (!TYPES.has(type)) return json({error: 'Unbekannter Inhaltsbereich.'}, 400)
-      return sanity(`/data/query/${DATASET}?query=${encodeURIComponent(`*[_type == "${type}"] | order(_updatedAt desc) { ..., "imageUrl": image.asset->url, "logoUrl": logo.asset->url, "portraitUrl": portrait.asset->url, body[]{ ..., "imageUrl": asset->url } }`)}&perspective=raw`, env)
+      return sanity(`/data/query/${DATASET}?query=${encodeURIComponent(`*[_type == "${type}"] | order(_updatedAt desc) { ..., "imageUrl": image.asset->url, "logoUrl": logo.asset->url, "portraitUrl": portrait.asset->url, body[]{ ..., "imageUrl": asset->url, images[]{ ..., "imageUrl": asset->url } } }`)}&perspective=raw`, env)
     }
     if (target.pathname === '/api/documents' && request.method === 'POST') return save(request, env)
     if (target.pathname === '/api/status' && request.method === 'POST') return changeStatus(request, env)

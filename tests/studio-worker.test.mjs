@@ -51,6 +51,25 @@ test('keeps several paragraphs in one editable text section', () => {
   assert.equal(doc.body[0].text, body[0].text)
 })
 
+test('gallery preserves image order and uses the chosen cover', () => {
+  const body = [{key: 'gallery123', type: 'gallery', images: [
+    {key: 'photoone', imageAssetId: 'image-1234567890-png', alt: 'Erstes Motiv', caption: 'Erster Abend'},
+    {key: 'phototwo', imageAssetId: 'image-0987654321-png', alt: 'Zweites Motiv', caption: 'Zweiter Abend'},
+  ]}]
+  const doc = cleanDocument({_type: 'project', title: 'Bilder vom Fest', summary: 'Ein schöner Abend.', articleTemplate: 'gallery', body, coverImageKey: 'phototwo', publish: true}).doc
+  assert.deepEqual(doc.body[0].images.map((item) => item._key), ['photoone', 'phototwo'])
+  assert.equal(doc.body[0]._type, 'gallery')
+  assert.equal(doc.image.asset._ref, 'image-0987654321-png')
+  assert.equal(doc.coverImageKey, 'phototwo')
+  const twenty = Array.from({length: 20}, (_, index) => ({key: `photo${String(index).padStart(6, '0')}`, imageAssetId: `image-1234567890${index}-png`, alt: `Motiv ${index + 1}`}))
+  const largeGallery = cleanDocument({_type: 'project', title: 'Zwanzig Bilder', summary: 'Ein Bildbericht.', articleTemplate: 'gallery', body: [{key: 'gallery123', type: 'gallery', images: twenty}], publish: true}).doc
+  assert.equal(largeGallery.body[0].images.length, 20)
+  assert.equal(largeGallery.coverImageKey, twenty[0].key)
+  assert.throws(() => cleanDocument({_type: 'project', title: 'Leere Galerie', summary: 'Noch keine Fotos.', articleTemplate: 'gallery', body: [{key: 'gallery123', type: 'gallery', images: []}], publish: true}), /Galeriebild/)
+  const draft = cleanDocument({_type: 'project', title: 'Leere Galerie', summary: 'Noch keine Fotos.', articleTemplate: 'gallery', body: [{key: 'gallery123', type: 'gallery', images: []}], publish: false}).doc
+  assert.equal(draft.body[0].images.length, 0)
+})
+
 test('login protects content APIs and uses an HttpOnly session with CSRF', async () => {
   const account = await createPasswordRecord('info@moinander.de', 'vier Wiesen tragen Ideen 2026')
   const env = {

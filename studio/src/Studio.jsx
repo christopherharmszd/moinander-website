@@ -10,9 +10,10 @@ const TEMPLATES = [
   {value: 'short', label: 'Kurzer Beitrag', description: 'Für kurze Neuigkeiten mit wenigen Absätzen und optionalen Bildern.'},
   {value: 'photo', label: 'Bildbericht', description: 'Für viele Bilder mit kurzen Texten dazwischen. Zwei Bildplätze sind vorbereitet.'},
   {value: 'feature', label: 'Ausführlicher Artikel', description: 'Für längere Geschichten mit Abschnitten und Zwischenüberschriften.'},
+  {value: 'gallery', label: 'Galeriebeitrag', description: 'Kurzer Text und viele Bilder. Lade mehrere Fotos auf einmal hoch und ordne sie danach.'},
 ]
 const EMPTY = {
-  project: {title: '', slug: '', kind: 'Förderprojekt', articleTemplate: 'short', summary: '', body: [], featuredOnHome: false, homeOrder: '', imageAssetId: '', imageAlt: ''},
+  project: {title: '', slug: '', kind: 'Förderprojekt', articleTemplate: 'short', summary: '', body: [], featuredOnHome: false, homeOrder: '', imageAssetId: '', imageAlt: '', coverImageKey: ''},
   event: {title: '', startsAt: '', endsAt: '', location: '', summary: '', description: '', link: ''},
   partner: {name: '', kind: 'Partner', summary: '', website: '', sortOrder: '', imageAssetId: '', imageAlt: ''},
   boardMember: {name: '', role: '', sortOrder: '', imageAssetId: '', imageAlt: ''},
@@ -44,19 +45,23 @@ function toLocal(value) {
 }
 function toIso(value) { return value ? new Date(value).toISOString() : '' }
 function plain(blocks) { return Array.isArray(blocks) ? blocks.map((block) => block.children?.map((child) => child.text || '').join('') || '').join('\n\n') : '' }
-function newBlock(type = 'text', style = 'normal') { return {key: crypto.randomUUID().replace(/-/g, '').slice(0, 12), type, style, text: '', imageAssetId: '', imageUrl: '', alt: '', caption: '', credit: '', note: ''} }
+function newBlock(type = 'text', style = 'normal') { return {key: crypto.randomUUID().replace(/-/g, '').slice(0, 12), type, style, text: '', imageAssetId: '', imageUrl: '', alt: '', caption: '', credit: '', note: '', images: []} }
 function starterBlocks(template) {
+  if (template === 'gallery') return [newBlock('text'), newBlock('gallery')]
   if (template === 'photo') return [newBlock(), newBlock('image'), newBlock(), newBlock('image')]
   if (template === 'feature') return [newBlock(), newBlock('text', 'h2'), newBlock()]
   return [newBlock()]
 }
-function isEmptyStructure(blocks) {return blocks.every((block) => !block.text?.trim() && !block.imageAssetId && !block.caption?.trim() && !block.note?.trim())}
+function isEmptyStructure(blocks) {return blocks.every((block) => !block.text?.trim() && !block.imageAssetId && !block.caption?.trim() && !block.note?.trim() && !block.images?.length)}
 function editorBlocks(blocks) {
   if (!Array.isArray(blocks)) return []
   return blocks.map((block) => block._type === 'image' ? {
     ...newBlock('image'), key: block._key, imageAssetId: block.asset?._ref || '',
     imageUrl: block.asset?.url || block.imageUrl || '', alt: block.alt || '',
     caption: block.caption || '', credit: block.credit || '', note: block.note || '',
+  } : block._type === 'gallery' ? {
+    ...newBlock('gallery'), key: block._key,
+    images: (block.images || []).map((item) => ({key: item._key, imageAssetId: item.asset?._ref || '', imageUrl: item.imageUrl || '', alt: item.alt || '', caption: item.caption || '', credit: item.credit || ''})),
   } : block._type === 'textSection' ? {
     ...newBlock(), key: block._key, text: block.text || '',
   } : {
@@ -116,7 +121,76 @@ function ImageField({form, update, busy, setBusy, setError}) {
   return <div className="image-field"><div className="image-preview">{form.imageUrl ? <img src={form.imageUrl} alt={form.imageAlt || 'Vorschau'} /> : <span>Bildvorschau</span>}</div><div><strong>{form.imageAssetId ? 'Bild ausgewählt' : 'Bild hinzufügen'}</strong><p>JPEG, PNG, WebP oder AVIF · maximal 12 MB</p><label className="button secondary upload-button">{busy ? 'Bild wird hochgeladen …' : 'Bild hochladen'}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {upload(event.target.files?.[0]); event.target.value = ''}} /></label>{form.imageAssetId && <button type="button" className="text-button" onClick={() => {update('imageAssetId', ''); update('imageUrl', '')}}>Bild entfernen</button>}</div>{form.imageAssetId && field('Bildbeschreibung für Barrierefreiheit', form.imageAlt, (value) => update('imageAlt', value), {placeholder: 'Was ist auf dem Bild zu sehen?'})}</div>
 }
 
-function BodyEditor({blocks, update, busy, setBusy, setError}) {
+function GalleryEditor({block, update, busy, setBusy, setError, coverImageKey, setCoverImageKey}) {
+  const [progress, setProgress] = useState('')
+  const images = block.images || []
+  const selectedCover = images.some((item) => item.key === coverImageKey) ? coverImageKey : images[0]?.key
+  function changeImage(photoKey, patch) {
+    update((current) => current.map((item) => item.key === block.key ? {...item, images: item.images.map((photo) => photo.key === photoKey ? {...photo, ...patch} : photo)} : item))
+  }
+  function moveImage(position, direction) {
+    const next = [...images], target = position + direction
+    if (target < 0 || target >= next.length) return
+    ;[next[position], next[target]] = [next[target], next[position]]
+    update((current) => current.map((item) => item.key === block.key ? {...item, images: next} : item))
+  }
+  function removeImage(photoKey) {
+    const remaining = images.filter((photo) => photo.key !== photoKey)
+    update((current) => current.map((item) => item.key === block.key ? {...item, images: remaining} : item))
+    if (selectedCover === photoKey) setCoverImageKey(remaining[0]?.key || '')
+  }
+  async function uploadFiles(fileList) {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    if (images.length + files.length > 60) {setError('Eine Galerie darf höchstens 60 Bilder enthalten.'); return}
+    if (files.some((file) => !['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.type) || file.size > 12_000_000)) {
+      setError('Bitte nur JPEG, PNG, WebP oder AVIF mit höchstens 12 MB je Bild auswählen.'); return
+    }
+    setBusy(true); setError(''); setProgress(`0 von ${files.length} Bildern hochgeladen`)
+    const uploaded = [], failed = []
+    try {
+      for (let offset = 0; offset < files.length; offset += 3) {
+        const batch = files.slice(offset, offset + 3)
+        const results = await Promise.allSettled(batch.map(async (file) => {
+          const response = await api('upload', {method: 'POST', headers: {'content-type': file.type, 'x-file-name': file.name}, body: file})
+          if (!response.document?._id || !response.document?.url) throw new Error('Upload fehlgeschlagen')
+          return {key: crypto.randomUUID().replace(/-/g, '').slice(0, 12), imageAssetId: response.document._id,
+            imageUrl: response.document.url, alt: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '), caption: '', credit: ''}
+        }))
+        results.forEach((result, index) => result.status === 'fulfilled' ? uploaded.push(result.value) : failed.push(batch[index].name))
+        setProgress(`${Math.min(offset + batch.length, files.length)} von ${files.length} Bildern verarbeitet`)
+      }
+      if (uploaded.length) {
+        update((current) => current.map((item) => item.key === block.key ? {...item, images: [...(item.images || []), ...uploaded]} : item))
+        if (!selectedCover) setCoverImageKey(uploaded[0].key)
+      }
+      if (failed.length) setError(`${failed.length} Bild(er) konnten nicht hochgeladen werden: ${failed.join(', ')}`)
+    } finally {setBusy(false); setProgress('')}
+  }
+  return <div className="gallery-editor">
+    <p>{images.length} {images.length === 1 ? 'Bild' : 'Bilder'} in dieser Galerie. Alle hochgeladenen Bilder erscheinen im Beitrag.</p>
+    <label className="button secondary upload-button">{busy ? 'Bilder werden hochgeladen …' : 'Mehrere Bilder hochladen'}
+      <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple disabled={busy} onChange={(event) => {uploadFiles(event.target.files); event.target.value = ''}} />
+    </label>
+    {progress && <p role="status">{progress}</p>}
+    <div className="gallery-editor-list">{images.map((photo, position) => <div className="gallery-editor-photo" key={photo.key}>
+      <div className="gallery-editor-photo-head"><strong>Bild {position + 1}</strong><div>
+          <button type="button" disabled={busy || position === 0} onClick={() => moveImage(position, -1)} aria-label={`Bild ${position + 1} nach vorne`}>↑</button>
+          <button type="button" disabled={busy || position === images.length - 1} onClick={() => moveImage(position, 1)} aria-label={`Bild ${position + 1} nach hinten`}>↓</button>
+          <button type="button" disabled={busy} onClick={() => removeImage(photo.key)} aria-label={`Bild ${position + 1} entfernen`}>×</button>
+      </div></div>
+      <img src={photo.imageUrl} alt={photo.alt || ''} />
+      <label className="gallery-cover"><input type="radio" name={`cover-${block.key}`} checked={photo.key === selectedCover} onChange={() => setCoverImageKey(photo.key)} /> Titelbild für Übersicht</label>
+      <details><summary>Bildtext & Beschreibung</summary><div className="gallery-editor-photo-fields">
+          {field('Bildbeschreibung für Barrierefreiheit', photo.alt, (value) => changeImage(photo.key, {alt: value}), {maxLength: 300, placeholder: 'Motiv beschreiben'})}
+          {field('Bildunterschrift (optional)', photo.caption, (value) => changeImage(photo.key, {caption: value}), {maxLength: 300, placeholder: 'Was ist auf diesem Bild zu sehen?'})}
+          {field('Bildnachweis (optional)', photo.credit, (value) => changeImage(photo.key, {credit: value}), {maxLength: 200, placeholder: 'Foto: Name'})}
+      </div></details>
+    </div>)}</div>
+  </div>
+}
+
+function BodyEditor({blocks, update, busy, setBusy, setError, coverImageKey, setCoverImageKey}) {
   const [openKeys, setOpenKeys] = useState(() => new Set())
   function toggle(id) {setOpenKeys((old) => {const next = new Set(old); next.has(id) ? next.delete(id) : next.add(id); return next})}
   function change(index, patch) { update(blocks.map((block, position) => position === index ? {...block, ...patch} : block)) }
@@ -147,12 +221,12 @@ function BodyEditor({blocks, update, busy, setBusy, setError}) {
       } : block))
     } catch (problem) {setError(problem.message)} finally {setBusy(false)}
   }
-  const additions = (index) => <div className="block-add"><button type="button" onClick={() => insert(index, 'text')}>+ Textabschnitt</button><button type="button" onClick={() => insert(index, 'text', 'h2')}>+ Überschrift</button><button type="button" onClick={() => insert(index, 'image')}>+ Bild</button></div>
+  const additions = (index) => <div className="block-add"><button type="button" onClick={() => insert(index, 'text')}>+ Textabschnitt</button><button type="button" onClick={() => insert(index, 'text', 'h2')}>+ Überschrift</button><button type="button" onClick={() => insert(index, 'image')}>+ Bild</button><button type="button" onClick={() => insert(index, 'gallery')}>+ Galerie</button></div>
   return <section className="body-editor"><div className="body-editor-head"><div><h3>Beitrag gestalten</h3><p>Ein Textabschnitt kann mehrere Absätze enthalten. Trenne sie mit einer Leerzeile; Bilder und Überschriften setzt du dazwischen.</p></div></div>
     {blocks.length === 0 && <p className="body-empty">Beginne mit einem Absatz, einer Überschrift oder einem Bild.</p>}
-    {blocks.map((block, index) => <React.Fragment key={block.key}><div className={`body-block ${block.type === 'image' ? 'image-block' : ''}`}><div className="body-block-bar"><strong>{block.type === 'image' ? `Bild ${index + 1}` : block.style === 'h2' ? `Überschrift ${index + 1}` : block.style === 'h3' ? `Zwischenüberschrift ${index + 1}` : `Textabschnitt ${index + 1}`}</strong><div><button type="button" onClick={() => toggle(block.key)} aria-expanded={openKeys.has(block.key)}>{openKeys.has(block.key) ? 'Schließen' : 'Bearbeiten'}</button><button type="button" title="Nach oben" aria-label={`Block ${index + 1} nach oben`} disabled={busy || index === 0} onClick={() => move(index, -1)}>↑</button><button type="button" title="Nach unten" aria-label={`Block ${index + 1} nach unten`} disabled={busy || index === blocks.length - 1} onClick={() => move(index, 1)}>↓</button><button type="button" title="Block entfernen" aria-label={`Block ${index + 1} entfernen`} disabled={busy} onClick={() => remove(index)}>×</button></div></div>
-      {!openKeys.has(block.key) && <p className="body-block-summary">{block.type === 'image' ? (block.caption || block.note || (block.imageAssetId ? 'Bild hochgeladen' : 'Bild fehlt noch')) : (block.text || 'Noch kein Text')}</p>}
-      {openKeys.has(block.key) && (block.type === 'image' ? <><div className="inline-image-preview">{block.imageUrl ? <img src={block.imageUrl} alt={block.alt || 'Bildvorschau'} /> : <span>{block.note || 'Noch kein Bild hochgeladen'}</span>}</div><label className="button secondary upload-button">{block.imageAssetId ? 'Bild ersetzen' : 'Bild hochladen'}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {upload(index, event.target.files?.[0]); event.target.value = ''}} /></label>{field('Bildunterschrift', block.caption, (value) => change(index, {caption: value}), {maxLength: 300, placeholder: 'Was zeigt dieses Bild?'})}{field('Bildbeschreibung für Barrierefreiheit', block.alt, (value) => change(index, {alt: value}), {maxLength: 300, placeholder: 'Motiv und wichtige Details beschreiben'})}{field('Bildnachweis', block.credit, (value) => change(index, {credit: value}), {maxLength: 200, placeholder: 'Zum Beispiel Foto: Name'})}{!block.imageAssetId && field('Redaktionelle Notiz (nicht öffentlich)', block.note, (value) => change(index, {note: value}), {maxLength: 300, placeholder: 'Welches Foto fehlt noch?'})}</> : <><label className="field"><span>Textart</span><select value={block.style} onChange={(event) => change(index, {style: event.target.value})}><option value="normal">Textabschnitt</option><option value="h2">Überschrift</option><option value="h3">Zwischenüberschrift</option></select></label>{field('Text', block.text, (value) => change(index, {text: value}), {multiline: true, rows: block.style === 'normal' ? 8 : 2, placeholder: block.style === 'normal' ? 'Text eingeben – Leerzeile für einen neuen Absatz …' : 'Überschrift eingeben …'})}{block.style === 'normal' && <small className="block-help">Eine Leerzeile erzeugt einen neuen Absatz auf der Website.</small>}{block.style === 'normal' && blocks[index + 1]?.type === 'text' && blocks[index + 1]?.style === 'normal' && <button type="button" className="text-button merge-button" onClick={() => mergeWithNext(index)}>Mit nächstem Textabschnitt verbinden</button>}{/^\[Foto:.*\]$/s.test(block.text.trim()) && <button type="button" className="text-button" onClick={() => change(index, {type: 'image', note: block.text.slice(1, -1).replace(/^Foto:\s*/, '')})}>Diesen Foto-Hinweis in einen Bildplatz umwandeln</button>}</>)}
+    {blocks.map((block, index) => <React.Fragment key={block.key}><div className={`body-block ${block.type === 'image' ? 'image-block' : ''}`}><div className="body-block-bar"><strong>{block.type === 'image' ? `Bild ${index + 1}` : block.type === 'gallery' ? `Galerie ${index + 1}` : block.style === 'h2' ? `Überschrift ${index + 1}` : block.style === 'h3' ? `Zwischenüberschrift ${index + 1}` : `Textabschnitt ${index + 1}`}</strong><div><button type="button" onClick={() => toggle(block.key)} aria-expanded={openKeys.has(block.key)}>{openKeys.has(block.key) ? 'Schließen' : 'Bearbeiten'}</button><button type="button" title="Nach oben" aria-label={`Block ${index + 1} nach oben`} disabled={busy || index === 0} onClick={() => move(index, -1)}>↑</button><button type="button" title="Nach unten" aria-label={`Block ${index + 1} nach unten`} disabled={busy || index === blocks.length - 1} onClick={() => move(index, 1)}>↓</button><button type="button" title="Block entfernen" aria-label={`Block ${index + 1} entfernen`} disabled={busy} onClick={() => remove(index)}>×</button></div></div>
+      {!openKeys.has(block.key) && <p className="body-block-summary">{block.type === 'image' ? (block.caption || block.note || (block.imageAssetId ? 'Bild hochgeladen' : 'Bild fehlt noch')) : block.type === 'gallery' ? `${block.images?.length || 0} Bilder` : (block.text || 'Noch kein Text')}</p>}
+      {openKeys.has(block.key) && (block.type === 'gallery' ? <GalleryEditor block={block} update={update} busy={busy} setBusy={setBusy} setError={setError} coverImageKey={coverImageKey} setCoverImageKey={setCoverImageKey} /> : block.type === 'image' ? <><div className="inline-image-preview">{block.imageUrl ? <img src={block.imageUrl} alt={block.alt || 'Bildvorschau'} /> : <span>{block.note || 'Noch kein Bild hochgeladen'}</span>}</div><label className="button secondary upload-button">{block.imageAssetId ? 'Bild ersetzen' : 'Bild hochladen'}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {upload(index, event.target.files?.[0]); event.target.value = ''}} /></label>{field('Bildunterschrift', block.caption, (value) => change(index, {caption: value}), {maxLength: 300, placeholder: 'Was zeigt dieses Bild?'})}{field('Bildbeschreibung für Barrierefreiheit', block.alt, (value) => change(index, {alt: value}), {maxLength: 300, placeholder: 'Motiv und wichtige Details beschreiben'})}{field('Bildnachweis', block.credit, (value) => change(index, {credit: value}), {maxLength: 200, placeholder: 'Zum Beispiel Foto: Name'})}{!block.imageAssetId && field('Redaktionelle Notiz (nicht öffentlich)', block.note, (value) => change(index, {note: value}), {maxLength: 300, placeholder: 'Welches Foto fehlt noch?'})}</> : <><label className="field"><span>Textart</span><select value={block.style} onChange={(event) => change(index, {style: event.target.value})}><option value="normal">Textabschnitt</option><option value="h2">Überschrift</option><option value="h3">Zwischenüberschrift</option></select></label>{field('Text', block.text, (value) => change(index, {text: value}), {multiline: true, rows: block.style === 'normal' ? 8 : 2, placeholder: block.style === 'normal' ? 'Text eingeben – Leerzeile für einen neuen Absatz …' : 'Überschrift eingeben …'})}{block.style === 'normal' && <small className="block-help">Eine Leerzeile erzeugt einen neuen Absatz auf der Website.</small>}{block.style === 'normal' && blocks[index + 1]?.type === 'text' && blocks[index + 1]?.style === 'normal' && <button type="button" className="text-button merge-button" onClick={() => mergeWithNext(index)}>Mit nächstem Textabschnitt verbinden</button>}{/^\[Foto:.*\]$/s.test(block.text.trim()) && <button type="button" className="text-button" onClick={() => change(index, {type: 'image', note: block.text.slice(1, -1).replace(/^Foto:\s*/, '')})}>Diesen Foto-Hinweis in einen Bildplatz umwandeln</button>}</>)}
     </div>{additions(index + 1)}</React.Fragment>)}
     {blocks.length === 0 && additions(0)}
   </section>
@@ -175,7 +249,10 @@ function Editor({type, initial, onClose, onSaved}) {
   const area = AREAS.find((item) => item.key === type)
   function update(key, value) { setForm((old) => ({...old, [key]: value})) }
   function changeTemplate(value) {
-    setForm((old) => ({...old, articleTemplate: value, body: !initial && isEmptyStructure(old.body) ? starterBlocks(value) : old.body}))
+    setForm((old) => ({...old, articleTemplate: value,
+      body: !initial && isEmptyStructure(old.body) ? starterBlocks(value)
+        : value === 'gallery' && !old.body.some((block) => block.type === 'gallery') ? [...old.body, newBlock('gallery')] : old.body,
+    }))
   }
   async function save(publish) {
     setBusy(true); setError('')
@@ -205,8 +282,8 @@ function Editor({type, initial, onClose, onSaved}) {
       <label className="field"><span>Art des Beitrags</span><select value={form.kind || 'Förderprojekt'} onChange={(event) => update('kind', event.target.value)}>{['Förderprojekt', 'Schule & Jugend', 'Aus der Region', 'Vereinsprojekt'].map((item) => <option key={item}>{item}</option>)}</select></label>
       <label className="field"><span>Beitragsvorlage</span><select value={form.articleTemplate || 'feature'} onChange={(event) => changeTemplate(event.target.value)}>{TEMPLATES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>{TEMPLATES.find((item) => item.value === (form.articleTemplate || 'feature'))?.description} Vorhandene Texte und Bilder bleiben beim Wechsel erhalten.</small></label>
       {field('Kurzbeschreibung *', form.summary, (value) => update('summary', value), {multiline: true, rows: 3, maxLength: 300, placeholder: 'Ein bis zwei Sätze für Übersichten'})}
-      <BodyEditor blocks={form.body} update={(value) => setForm((old) => ({...old, body: typeof value === 'function' ? value(old.body) : value}))} busy={busy} setBusy={setBusy} setError={setError} />
-      <ImageField form={form} update={update} busy={busy} setBusy={setBusy} setError={setError} />
+      <BodyEditor blocks={form.body} update={(value) => setForm((old) => ({...old, body: typeof value === 'function' ? value(old.body) : value}))} busy={busy} setBusy={setBusy} setError={setError} coverImageKey={form.coverImageKey} setCoverImageKey={(value) => update('coverImageKey', value)} />
+      {form.articleTemplate !== 'gallery' && <ImageField form={form} update={update} busy={busy} setBusy={setBusy} setError={setError} />}
       <div className="highlight-box"><label className="check"><input type="checkbox" checked={Boolean(form.featuredOnHome)} onChange={(event) => update('featuredOnHome', event.target.checked)} /> Auf der Startseite zeigen</label>{form.featuredOnHome && <label className="field"><span>Platz auf der Startseite</span><select value={form.homeOrder} onChange={(event) => update('homeOrder', event.target.value)}><option value="">Bitte wählen</option><option value="1">1 · zuerst</option><option value="2">2 · danach</option><option value="3">3 · zuletzt</option></select></label>}<small>Es gibt drei Plätze. Jeder Platz kann nur einmal vergeben werden.</small></div>
     </>}
     {type === 'event' && <>
