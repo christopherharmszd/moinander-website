@@ -2,8 +2,15 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "moinander-studio",
   "compatibility_date": "2026-09-30",
+  "main": "./worker.js",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "ratelimits": [{
+    "name": "LOGIN_LIMITER",
+    "namespace_id": "4182376",
+    "simple": { "limit": 8, "period": 60 }
+  }]
 }
