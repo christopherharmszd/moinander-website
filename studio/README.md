@@ -25,3 +25,7 @@ npm run deploy
 Benötigte Worker-Secrets sind `STUDIO_ADMIN_ACCOUNTS` (PBKDF2-Verifier, siehe `auth.js`), `STUDIO_SESSION_SECRET` und `SANITY_WRITE_TOKEN`. Das konfigurierte `LOGIN_LIMITER`-Binding begrenzt Anmeldeversuche. Bei einer neuen Deployment-Umgebung müssen die Secrets separat eingerichtet werden; sie sind nicht im Repository enthalten.
 
 Der Worker darf nur Inhalte der vier freigegebenen Typen bearbeiten. Für Projektbeiträge lassen sich drei Startseitenplätze auswählen; der nächste veröffentlichte Termin wird auf der Website automatisch ermittelt. Bilder werden über den Worker direkt nach Sanity hochgeladen.
+
+Projektbeiträge bestehen aus frei sortierbaren Absätzen, Überschriften und Bildblöcken. Bildblöcke können eine Bildunterschrift, barrierefreie Beschreibung und einen Nachweis enthalten. Leere Bildplätze lassen sich als Entwurf speichern; für eine Veröffentlichung müssen alle eingefügten Bildblöcke ein hochgeladenes Bild enthalten. Bestehende reine Textbeiträge werden beim Öffnen in Textblöcke übernommen.
+
+Für neue Projektbeiträge stehen die Vorlagen **Kurzer Beitrag**, **Bildbericht** und **Ausführlicher Artikel** bereit. Sie unterscheiden sich durch ihre Startblöcke und die Lesebreite der öffentlichen Artikelseite. Nach der Auswahl bleiben alle Blöcke frei bearbeitbar. Ein Wechsel der Vorlage erhält bereits geschriebene Inhalte; ältere Beiträge nutzen zunächst die ausführliche Darstellung.

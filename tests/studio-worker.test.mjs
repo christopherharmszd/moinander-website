@@ -11,6 +11,7 @@ test('project and event fields match the public Sanity schema', () => {
   assert.equal(project._id.startsWith('project-'), true)
   assert.equal(project.body.length, 2)
   assert.equal(project.homeOrder, 2)
+  assert.equal(project.articleTemplate, 'feature')
   const event = cleanDocument({_type: 'event', title: 'Turnier', summary: 'Gemeinsam spielen.', startsAt: '2026-11-14T10:00:00.000Z', publish: false}).doc
   assert.equal(event._id.startsWith('drafts.event-'), true)
   assert.equal(event.startsAt, '2026-11-14T10:00:00.000Z')
@@ -20,6 +21,25 @@ test('rejects invalid public data before reaching Sanity', () => {
   assert.throws(() => cleanDocument({_type: 'project', title: 'Ohne Beschreibung', publish: true}), /Kurzbeschreibung/)
   assert.throws(() => cleanDocument({_type: 'event', title: 'Termin', summary: 'Kurz', startsAt: 'ungültig', publish: true}), /Datum/)
   assert.throws(() => cleanDocument({_type: 'partner', name: 'Partner', kind: 'Unbekannt', website: 'javascript:alert(1)', publish: true}), /Webadresse/)
+})
+
+test('keeps article block order and protects incomplete image positions', () => {
+  const body = [
+    {key: 'heading1', type: 'text', style: 'h2', text: 'Mehr als ein Bierwagen?'},
+    {key: 'paragraph1', type: 'text', style: 'normal', text: 'Ein offener Dorfabend.'},
+    {key: 'photo1', type: 'image', imageAssetId: 'image-1234567890-png', alt: 'Das Team', caption: 'Das Rudelbar-Team', credit: 'Foto: Moinander', note: 'Freigabe intern prüfen'},
+  ]
+  const doc = cleanDocument({_type: 'project', title: 'Rudelbar', articleTemplate: 'photo', summary: 'Ein mobiler Treffpunkt.', body, publish: true}).doc
+  assert.equal(doc.articleTemplate, 'photo')
+  assert.deepEqual(doc.body.map((block) => block._type), ['block', 'block', 'image'])
+  assert.equal(doc.body[0].style, 'h2')
+  assert.equal(doc.body[2].asset._ref, 'image-1234567890-png')
+  assert.equal(doc.body[2].caption, 'Das Rudelbar-Team')
+  assert.equal('note' in doc.body[2], false)
+  assert.throws(() => cleanDocument({_type: 'project', title: 'Rudelbar', summary: 'Ein mobiler Treffpunkt.', body: [{key: 'photo2', type: 'image', note: 'Bild folgt'}], publish: true}), /Bildblock/)
+  const draft = cleanDocument({_type: 'project', title: 'Rudelbar', summary: 'Ein mobiler Treffpunkt.', body: [{key: 'photo2', type: 'image', note: 'Bild folgt'}], publish: false}).doc
+  assert.equal(draft.body[0].note, 'Bild folgt')
+  assert.throws(() => cleanDocument({_type: 'project', title: 'Rudelbar', articleTemplate: 'unbekannt', summary: 'Kurz', body: [], publish: false}), /Beitragsvorlage/)
 })
 
 test('login protects content APIs and uses an HttpOnly session with CSRF', async () => {

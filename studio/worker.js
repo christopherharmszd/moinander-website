@@ -68,13 +68,44 @@ function image(ref, alt) {
   return {_type: 'image', asset: {_type: 'reference', _ref: ref}, alt: text(alt, 300)}
 }
 
-function blocks(value) {
-  const raw = text(value, 30000)
-  if (!raw) return []
-  return raw.split(/\n\s*\n/).filter(Boolean).slice(0, 80).map((paragraph) => ({
-    _type: 'block', _key: crypto.randomUUID().replace(/-/g, '').slice(0, 12), style: 'normal',
-    markDefs: [], children: [{_type: 'span', _key: crypto.randomUUID().replace(/-/g, '').slice(0, 12), text: paragraph.replace(/\n/g, ' '), marks: []}],
-  }))
+function key(value) {
+  return typeof value === 'string' && /^[a-zA-Z0-9_-]{6,40}$/.test(value)
+    ? value : crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+}
+
+function textBlock(value, style = 'normal', id) {
+  const content = text(value, 10000)
+  if (!content) return null
+  if (!['normal', 'h2', 'h3'].includes(style)) throw new Error('Unbekannte Textformatierung.')
+  return {
+    _type: 'block', _key: key(id), style, markDefs: [],
+    children: [{_type: 'span', _key: key(), text: content.replace(/\n/g, ' '), marks: []}],
+  }
+}
+
+function blocks(value, {publish = false} = {}) {
+  if (value == null) return []
+  if (typeof value === 'string') {
+    const raw = text(value, 30000)
+    return raw ? raw.split(/\n\s*\n/).filter(Boolean).slice(0, 80).map((paragraph) => textBlock(paragraph)) : []
+  }
+  if (!Array.isArray(value) || value.length > 100) throw new Error('Der Beitrag enthält zu viele oder ungültige Blöcke.')
+  const result = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') throw new Error('Ein Beitragsblock ist ungültig.')
+    if (item.type === 'image') {
+      const asset = image(item.imageAssetId, item.alt)
+      if (!asset && publish) throw new Error('Bitte für jeden Bildblock ein Bild hochladen oder den leeren Bildblock entfernen.')
+      const caption = text(item.caption, 300)
+      const credit = text(item.credit, 200)
+      const note = text(item.note, 300)
+      result.push({_type: 'image', _key: key(item.key), ...(asset || {}), caption, credit, ...(!publish && note ? {note} : {})})
+    } else if (item.type === 'text') {
+      const block = textBlock(item.text, item.style || 'normal', item.key)
+      if (block) result.push(block)
+    } else throw new Error('Unbekannter Beitragsblock.')
+  }
+  return result
 }
 
 function slug(value) {
@@ -95,8 +126,10 @@ function cleanDocument(input) {
     doc.title = text(input.title, 180)
     doc.slug = {_type: 'slug', current: slug(input.slug || doc.title)}
     doc.kind = text(input.kind, 80)
+    doc.articleTemplate = text(input.articleTemplate || 'feature', 20)
+    if (!['short', 'photo', 'feature'].includes(doc.articleTemplate)) throw new Error('Unbekannte Beitragsvorlage.')
     doc.summary = text(input.summary, 300)
-    doc.body = blocks(input.body)
+    doc.body = blocks(input.body, {publish})
     doc.publishedAt = date(input.publishedAt) || new Date().toISOString()
     doc.featuredOnHome = input.featuredOnHome === true
     doc.homeOrder = doc.featuredOnHome ? number(input.homeOrder, 1, 3) : undefined
@@ -231,7 +264,7 @@ export default {
     if (target.pathname === '/api/documents' && request.method === 'GET') {
       const type = target.searchParams.get('type')
       if (!TYPES.has(type)) return json({error: 'Unbekannter Inhaltsbereich.'}, 400)
-      return sanity(`/data/query/${DATASET}?query=${encodeURIComponent(`*[_type == "${type}"] | order(_updatedAt desc) { ..., "imageUrl": image.asset->url, "logoUrl": logo.asset->url, "portraitUrl": portrait.asset->url }`)}&perspective=raw`, env)
+      return sanity(`/data/query/${DATASET}?query=${encodeURIComponent(`*[_type == "${type}"] | order(_updatedAt desc) { ..., "imageUrl": image.asset->url, "logoUrl": logo.asset->url, "portraitUrl": portrait.asset->url, body[]{ ..., "imageUrl": asset->url } }`)}&perspective=raw`, env)
     }
     if (target.pathname === '/api/documents' && request.method === 'POST') return save(request, env)
     if (target.pathname === '/api/status' && request.method === 'POST') return changeStatus(request, env)

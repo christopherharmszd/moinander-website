@@ -6,8 +6,13 @@ const AREAS = [
   {key: 'partner', label: 'Partner & Sponsoren', singular: 'Partner', intro: 'Menschen und Organisationen, die Moinander unterstützen.'},
   {key: 'boardMember', label: 'Vorstand', singular: 'Vorstandsmitglied', intro: 'Gewählte Personen und ihre Ämter im Verein.'},
 ]
+const TEMPLATES = [
+  {value: 'short', label: 'Kurzer Beitrag', description: 'Für kurze Neuigkeiten mit wenigen Absätzen und optionalen Bildern.'},
+  {value: 'photo', label: 'Bildbericht', description: 'Für viele Bilder mit kurzen Texten dazwischen. Zwei Bildplätze sind vorbereitet.'},
+  {value: 'feature', label: 'Ausführlicher Artikel', description: 'Für längere Geschichten mit Abschnitten und Zwischenüberschriften.'},
+]
 const EMPTY = {
-  project: {title: '', slug: '', kind: 'Förderprojekt', summary: '', body: '', featuredOnHome: false, homeOrder: '', imageAssetId: '', imageAlt: ''},
+  project: {title: '', slug: '', kind: 'Förderprojekt', articleTemplate: 'short', summary: '', body: [], featuredOnHome: false, homeOrder: '', imageAssetId: '', imageAlt: ''},
   event: {title: '', startsAt: '', endsAt: '', location: '', summary: '', description: '', link: ''},
   partner: {name: '', kind: 'Partner', summary: '', website: '', sortOrder: '', imageAssetId: '', imageAlt: ''},
   boardMember: {name: '', role: '', sortOrder: '', imageAssetId: '', imageAlt: ''},
@@ -39,6 +44,25 @@ function toLocal(value) {
 }
 function toIso(value) { return value ? new Date(value).toISOString() : '' }
 function plain(blocks) { return Array.isArray(blocks) ? blocks.map((block) => block.children?.map((child) => child.text || '').join('') || '').join('\n\n') : '' }
+function newBlock(type = 'text', style = 'normal') { return {key: crypto.randomUUID().replace(/-/g, '').slice(0, 12), type, style, text: '', imageAssetId: '', imageUrl: '', alt: '', caption: '', credit: '', note: ''} }
+function starterBlocks(template) {
+  if (template === 'photo') return [newBlock(), newBlock('image'), newBlock(), newBlock('image')]
+  if (template === 'feature') return [newBlock(), newBlock('text', 'h2'), newBlock()]
+  return [newBlock()]
+}
+function isEmptyStructure(blocks) {return blocks.every((block) => !block.text?.trim() && !block.imageAssetId && !block.caption?.trim() && !block.note?.trim())}
+function editorBlocks(blocks) {
+  if (!Array.isArray(blocks)) return []
+  return blocks.map((block) => block._type === 'image' ? {
+    ...newBlock('image'), key: block._key, imageAssetId: block.asset?._ref || '',
+    imageUrl: block.asset?.url || block.imageUrl || '', alt: block.alt || '',
+    caption: block.caption || '', credit: block.credit || '', note: block.note || '',
+  } : {
+    ...newBlock(), key: block._key,
+    style: ['h2', 'h3'].includes(block.style) ? block.style : 'normal',
+    text: block.children?.map((child) => child.text || '').join('') || '',
+  })
+}
 function getImageAsset(doc, type) { return (type === 'project' ? doc.image : type === 'partner' ? doc.logo : doc.portrait)?.asset?._ref || '' }
 function getImageAlt(doc, type) { return (type === 'project' ? doc.image : type === 'partner' ? doc.logo : doc.portrait)?.alt || '' }
 function getImageUrl(doc) { return doc.imageUrl || doc.logoUrl || doc.portraitUrl || '' }
@@ -90,21 +114,61 @@ function ImageField({form, update, busy, setBusy, setError}) {
   return <div className="image-field"><div className="image-preview">{form.imageUrl ? <img src={form.imageUrl} alt={form.imageAlt || 'Vorschau'} /> : <span>Bildvorschau</span>}</div><div><strong>{form.imageAssetId ? 'Bild ausgewählt' : 'Bild hinzufügen'}</strong><p>JPEG, PNG, WebP oder AVIF · maximal 12 MB</p><label className="button secondary upload-button">{busy ? 'Bild wird hochgeladen …' : 'Bild hochladen'}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {upload(event.target.files?.[0]); event.target.value = ''}} /></label>{form.imageAssetId && <button type="button" className="text-button" onClick={() => {update('imageAssetId', ''); update('imageUrl', '')}}>Bild entfernen</button>}</div>{form.imageAssetId && field('Bildbeschreibung für Barrierefreiheit', form.imageAlt, (value) => update('imageAlt', value), {placeholder: 'Was ist auf dem Bild zu sehen?'})}</div>
 }
 
+function BodyEditor({blocks, update, busy, setBusy, setError}) {
+  const [openKeys, setOpenKeys] = useState(() => new Set())
+  function toggle(id) {setOpenKeys((old) => {const next = new Set(old); next.has(id) ? next.delete(id) : next.add(id); return next})}
+  function change(index, patch) { update(blocks.map((block, position) => position === index ? {...block, ...patch} : block)) }
+  function insert(index, type, style = 'normal') {const block = newBlock(type, style); update([...blocks.slice(0, index), block, ...blocks.slice(index)]); setOpenKeys((old) => new Set([...old, block.key]))}
+  function remove(index) { update(blocks.filter((_, position) => position !== index)) }
+  function move(index, direction) {
+    const next = [...blocks], target = index + direction
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    update(next)
+  }
+  async function upload(index, file) {
+    if (!file) return
+    if (file.size > 12_000_000) {setError('Bilder dürfen höchstens 12 MB groß sein.'); return}
+    setBusy(true); setError('')
+    try {
+      const response = await api('upload', {method: 'POST', headers: {'content-type': file.type, 'x-file-name': file.name}, body: file})
+      if (!response.document?._id || !response.document?.url) throw new Error('Das Bild konnte nicht übernommen werden.')
+      update((current) => current.map((block, position) => position === index ? {
+        ...block, imageAssetId: response.document._id, imageUrl: response.document.url,
+        alt: block.alt || file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
+      } : block))
+    } catch (problem) {setError(problem.message)} finally {setBusy(false)}
+  }
+  const additions = (index) => <div className="block-add"><button type="button" onClick={() => insert(index, 'text')}>+ Absatz</button><button type="button" onClick={() => insert(index, 'text', 'h2')}>+ Überschrift</button><button type="button" onClick={() => insert(index, 'image')}>+ Bild</button></div>
+  return <section className="body-editor"><div className="body-editor-head"><div><h3>Beitrag gestalten</h3><p>Texte, Überschriften und Bilder erscheinen auf der Website in dieser Reihenfolge.</p></div></div>
+    {blocks.length === 0 && <p className="body-empty">Beginne mit einem Absatz, einer Überschrift oder einem Bild.</p>}
+    {blocks.map((block, index) => <React.Fragment key={block.key}><div className={`body-block ${block.type === 'image' ? 'image-block' : ''}`}><div className="body-block-bar"><strong>{block.type === 'image' ? `Bild ${index + 1}` : block.style === 'h2' ? `Überschrift ${index + 1}` : block.style === 'h3' ? `Zwischenüberschrift ${index + 1}` : `Absatz ${index + 1}`}</strong><div><button type="button" onClick={() => toggle(block.key)} aria-expanded={openKeys.has(block.key)}>{openKeys.has(block.key) ? 'Schließen' : 'Bearbeiten'}</button><button type="button" title="Nach oben" aria-label={`Block ${index + 1} nach oben`} disabled={busy || index === 0} onClick={() => move(index, -1)}>↑</button><button type="button" title="Nach unten" aria-label={`Block ${index + 1} nach unten`} disabled={busy || index === blocks.length - 1} onClick={() => move(index, 1)}>↓</button><button type="button" title="Block entfernen" aria-label={`Block ${index + 1} entfernen`} disabled={busy} onClick={() => remove(index)}>×</button></div></div>
+      {!openKeys.has(block.key) && <p className="body-block-summary">{block.type === 'image' ? (block.caption || block.note || (block.imageAssetId ? 'Bild hochgeladen' : 'Bild fehlt noch')) : (block.text || 'Noch kein Text')}</p>}
+      {openKeys.has(block.key) && (block.type === 'image' ? <><div className="inline-image-preview">{block.imageUrl ? <img src={block.imageUrl} alt={block.alt || 'Bildvorschau'} /> : <span>{block.note || 'Noch kein Bild hochgeladen'}</span>}</div><label className="button secondary upload-button">{block.imageAssetId ? 'Bild ersetzen' : 'Bild hochladen'}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {upload(index, event.target.files?.[0]); event.target.value = ''}} /></label>{field('Bildunterschrift', block.caption, (value) => change(index, {caption: value}), {maxLength: 300, placeholder: 'Was zeigt dieses Bild?'})}{field('Bildbeschreibung für Barrierefreiheit', block.alt, (value) => change(index, {alt: value}), {maxLength: 300, placeholder: 'Motiv und wichtige Details beschreiben'})}{field('Bildnachweis', block.credit, (value) => change(index, {credit: value}), {maxLength: 200, placeholder: 'Zum Beispiel Foto: Name'})}{!block.imageAssetId && field('Redaktionelle Notiz (nicht öffentlich)', block.note, (value) => change(index, {note: value}), {maxLength: 300, placeholder: 'Welches Foto fehlt noch?'})}</> : <><label className="field"><span>Textart</span><select value={block.style} onChange={(event) => change(index, {style: event.target.value})}><option value="normal">Absatz</option><option value="h2">Überschrift</option><option value="h3">Zwischenüberschrift</option></select></label>{field('Text', block.text, (value) => change(index, {text: value}), {multiline: true, rows: block.style === 'normal' ? 4 : 2, placeholder: block.style === 'normal' ? 'Text eingeben …' : 'Überschrift eingeben …'})}{/^\[Foto:.*\]$/s.test(block.text.trim()) && <button type="button" className="text-button" onClick={() => change(index, {type: 'image', note: block.text.slice(1, -1).replace(/^Foto:\s*/, '')})}>Diesen Foto-Hinweis in einen Bildplatz umwandeln</button>}</>)}
+    </div>{additions(index + 1)}</React.Fragment>)}
+    {blocks.length === 0 && additions(0)}
+  </section>
+}
+
 function Editor({type, initial, onClose, onSaved}) {
   const isPublished = Boolean(initial && !initial._id.startsWith('drafts.'))
   const [form, setForm] = useState(() => initial ? {
     ...initial,
     _id: initial._id.replace(/^drafts\./, ''),
     slug: initial.slug?.current || '',
-    body: plain(initial.body), description: plain(initial.description),
+    body: type === 'project' ? editorBlocks(initial.body) : initial.body,
+    description: plain(initial.description),
     startsAt: toLocal(initial.startsAt), endsAt: toLocal(initial.endsAt),
     imageAssetId: getImageAsset(initial, type), imageAlt: getImageAlt(initial, type), imageUrl: getImageUrl(initial),
     homeOrder: initial.homeOrder ?? '', sortOrder: initial.sortOrder ?? '',
-  } : {...EMPTY[type]})
+  } : {...EMPTY[type], ...(type === 'project' ? {body: starterBlocks('short')} : {})})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const area = AREAS.find((item) => item.key === type)
   function update(key, value) { setForm((old) => ({...old, [key]: value})) }
+  function changeTemplate(value) {
+    setForm((old) => ({...old, articleTemplate: value, body: !initial && isEmptyStructure(old.body) ? starterBlocks(value) : old.body}))
+  }
   async function save(publish) {
     setBusy(true); setError('')
     try {
@@ -131,8 +195,9 @@ function Editor({type, initial, onClose, onSaved}) {
       {field('Titel *', form.title, (value) => update('title', value), {required: true, placeholder: 'Worum geht es in diesem Beitrag?'})}
       {field('Webadresse', form.slug?.current ?? form.slug ?? '', (value) => update('slug', value), {placeholder: 'Wird aus dem Titel erzeugt, wenn leer'})}
       <label className="field"><span>Art des Beitrags</span><select value={form.kind || 'Förderprojekt'} onChange={(event) => update('kind', event.target.value)}>{['Förderprojekt', 'Schule & Jugend', 'Aus der Region', 'Vereinsprojekt'].map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label className="field"><span>Beitragsvorlage</span><select value={form.articleTemplate || 'feature'} onChange={(event) => changeTemplate(event.target.value)}>{TEMPLATES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>{TEMPLATES.find((item) => item.value === (form.articleTemplate || 'feature'))?.description} Vorhandene Texte und Bilder bleiben beim Wechsel erhalten.</small></label>
       {field('Kurzbeschreibung *', form.summary, (value) => update('summary', value), {multiline: true, rows: 3, maxLength: 300, placeholder: 'Ein bis zwei Sätze für Übersichten'})}
-      {field('Beitrag', form.body, (value) => update('body', value), {multiline: true, rows: 10, placeholder: 'Absätze mit einer Leerzeile trennen'})}
+      <BodyEditor blocks={form.body} update={(value) => setForm((old) => ({...old, body: typeof value === 'function' ? value(old.body) : value}))} busy={busy} setBusy={setBusy} setError={setError} />
       <ImageField form={form} update={update} busy={busy} setBusy={setBusy} setError={setError} />
       <div className="highlight-box"><label className="check"><input type="checkbox" checked={Boolean(form.featuredOnHome)} onChange={(event) => update('featuredOnHome', event.target.checked)} /> Auf der Startseite zeigen</label>{form.featuredOnHome && <label className="field"><span>Platz auf der Startseite</span><select value={form.homeOrder} onChange={(event) => update('homeOrder', event.target.value)}><option value="">Bitte wählen</option><option value="1">1 · zuerst</option><option value="2">2 · danach</option><option value="3">3 · zuletzt</option></select></label>}<small>Es gibt drei Plätze. Jeder Platz kann nur einmal vergeben werden.</small></div>
     </>}

@@ -3,6 +3,15 @@ import {defineField, defineType} from 'sanity'
 const richText = [
   {type: 'block' as const},
 ]
+const projectBlocks = [
+  {type: 'block' as const},
+  {type: 'image' as const, fields: [
+    defineField({name: 'alt', title: 'Bildbeschreibung', type: 'string'}),
+    defineField({name: 'caption', title: 'Bildunterschrift', type: 'string'}),
+    defineField({name: 'credit', title: 'Bildnachweis', type: 'string'}),
+    defineField({name: 'note', title: 'Redaktionelle Notiz', type: 'string'}),
+  ]},
+]
 
 const project = defineType({
   name: 'project', title: 'Projekte & Beiträge', type: 'document',
@@ -15,9 +24,14 @@ const project = defineType({
       {title: 'Aus der Region', value: 'Aus der Region'},
       {title: 'Vereinsprojekt', value: 'Vereinsprojekt'},
     ]}}),
+    defineField({name: 'articleTemplate', title: 'Beitragsvorlage', type: 'string', options: {list: [
+      {title: 'Kurzer Beitrag', value: 'short'},
+      {title: 'Bildbericht', value: 'photo'},
+      {title: 'Ausführlicher Artikel', value: 'feature'},
+    ]}}),
     defineField({name: 'summary', title: 'Kurzbeschreibung', type: 'text', rows: 3, validation: (rule) => rule.required().max(300)}),
     defineField({name: 'image', title: 'Titelbild', type: 'image', options: {hotspot: true}, fields: [defineField({name: 'alt', title: 'Bildbeschreibung', type: 'string'})]}),
-    defineField({name: 'body', title: 'Beitrag', type: 'array', of: richText}),
+    defineField({name: 'body', title: 'Beitrag', type: 'array', of: projectBlocks}),
     defineField({name: 'publishedAt', title: 'Veröffentlichungsdatum', type: 'datetime'}),
     defineField({name: 'featuredOnHome', title: 'Auf der Startseite zeigen', type: 'boolean', initialValue: false}),
     defineField({name: 'homeOrder', title: 'Reihenfolge auf der Startseite', type: 'number', hidden: ({document}) => !document?.featuredOnHome, validation: (rule) => rule.min(1).max(3)}),

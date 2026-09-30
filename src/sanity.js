@@ -1,7 +1,8 @@
 const query = `{
   "projects": *[_type == "project" && !(_id in path("drafts.**"))] | order(coalesce(publishedAt, _createdAt) desc) {
-    "id": _id, "slug": slug.current, kind, title, "description": summary,
-    "imageUrl": image.asset->url, "imageAlt": image.alt, body,
+    "id": _id, "slug": slug.current, kind, articleTemplate, title, "description": summary,
+    "imageUrl": image.asset->url, "imageAlt": image.alt,
+    body[]{ ..., "imageUrl": asset->url },
     featuredOnHome, "featuredOrder": homeOrder
   },
   "events": *[_type == "event" && !(_id in path("drafts.**"))] | order(startsAt asc) {
