@@ -202,7 +202,10 @@ async function save(request, env) {
   }
   return sanity(`/data/mutate/${DATASET}?returnIds=true`, env, {
     method: 'POST', headers: {'content-type': 'application/json'},
-    body: JSON.stringify({mutations: [{createOrReplace: doc}, {delete: {id: publish ? `drafts.${id}` : id}}]}),
+    body: JSON.stringify({mutations: [
+      {createOrReplace: doc},
+      ...(publish ? [{delete: {id: `drafts.${id}`}}] : []),
+    ]}),
   })
 }
 
