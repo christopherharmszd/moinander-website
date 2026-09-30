@@ -42,6 +42,15 @@ test('keeps article block order and protects incomplete image positions', () => 
   assert.throws(() => cleanDocument({_type: 'project', title: 'Rudelbar', articleTemplate: 'unbekannt', summary: 'Kurz', body: [], publish: false}), /Beitragsvorlage/)
 })
 
+test('keeps several paragraphs in one editable text section', () => {
+  const body = [{key: 'longtext1', type: 'text', style: 'normal', text: 'Erster Absatz.\n\nZweiter Absatz.\nNoch eine Zeile.'}]
+  const doc = cleanDocument({_type: 'project', title: 'Rudelbar', summary: 'Ein mobiler Treffpunkt.', body, publish: false}).doc
+  assert.equal(doc.body.length, 1)
+  assert.equal(doc.body[0]._type, 'textSection')
+  assert.equal(doc.body[0]._key, 'longtext1')
+  assert.equal(doc.body[0].text, body[0].text)
+})
+
 test('login protects content APIs and uses an HttpOnly session with CSRF', async () => {
   const account = await createPasswordRecord('info@moinander.de', 'vier Wiesen tragen Ideen 2026')
   const env = {

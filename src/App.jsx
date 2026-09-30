@@ -16,6 +16,7 @@ const articleUrl = (slug) => `${siteUrl('/projekte/')}?beitrag=${encodeURICompon
 const articleComponents = {
   types: {
     image: ({value}) => value.imageUrl ? <figure className="article-inline-image"><img src={value.imageUrl} alt={value.alt || ''} loading="lazy" />{(value.caption || value.credit) && <figcaption>{value.caption}{value.caption && value.credit && <span> · </span>}{value.credit && <span>{value.credit}</span>}</figcaption>}</figure> : null,
+    textSection: ({value}) => <div className="article-text-section">{(value.text || '').split(/\n\s*\n/).filter((paragraph) => paragraph.trim()).map((paragraph, index) => <p key={index}>{paragraph.trim()}</p>)}</div>,
   },
 };
 

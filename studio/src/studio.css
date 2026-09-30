@@ -12,6 +12,8 @@
 .body-block-bar button:disabled{opacity:.35;cursor:default}
 .body-block .field{margin-top:12px}
 .body-block textarea{min-height:70px}
+.body-block .block-help{display:block;color:#617487;margin-top:7px}
+.body-block .merge-button{display:block;margin:15px 0 0}
 .block-add{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;padding:10px 0 16px}
 .block-add button{border:1px dashed #9ab4c6;border-radius:9px;background:#f6fafc;color:#0b4f81;font-weight:700;padding:8px 12px;cursor:pointer}
 .block-add button:hover{background:#e5f2fa}

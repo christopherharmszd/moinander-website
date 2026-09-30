@@ -101,7 +101,10 @@ function blocks(value, {publish = false} = {}) {
       const note = text(item.note, 300)
       result.push({_type: 'image', _key: key(item.key), ...(asset || {}), caption, credit, ...(!publish && note ? {note} : {})})
     } else if (item.type === 'text') {
-      const block = textBlock(item.text, item.style || 'normal', item.key)
+      const content = text(item.text, 10000).replace(/\r\n?/g, '\n')
+      const block = (item.style || 'normal') === 'normal' && content.includes('\n')
+        ? {_type: 'textSection', _key: key(item.key), text: content}
+        : textBlock(content, item.style || 'normal', item.key)
       if (block) result.push(block)
     } else throw new Error('Unbekannter Beitragsblock.')
   }
